@@ -1,14 +1,16 @@
-require('dotenv').config(); // Load .env variables
+require('dotenv').config(); // Load environment variables
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./db');
 const Battery = require('./models/Battery');
 
-// Connect to MongoDB
-connectDB();
-
-const app = express();
+const app = express(); // Initialize Express App
 const PORT = process.env.PORT || 5000;
+
+// =======================
+// Connect to MongoDB
+// =======================
+connectDB();
 
 // =======================
 // Middleware
@@ -17,15 +19,27 @@ app.use(cors());
 app.use(express.json());
 
 // =======================
-// Base Route
+// Routes
 // =======================
+
+// Test Route
 app.get('/', (req, res) => {
   res.send('🔋 CellCycle API is running');
 });
 
+// Auth Routes (Sign Up & Login)
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
+
+// OTP Routes (Send + Verify Email OTP)
+const otpRoutes = require('./routes/otp');
+app.use('/api/otp', otpRoutes);
+
 // =======================
-// POST: Add New Battery
+// Battery Routes
 // =======================
+
+// Add New Battery
 app.post('/api/batteries', async (req, res) => {
   try {
     const battery = new Battery(req.body);
@@ -44,14 +58,10 @@ app.post('/api/batteries', async (req, res) => {
   }
 });
 
-// =======================
-// GET: All Batteries
-// =======================
+// Get All Batteries
 app.get('/api/batteries', async (req, res) => {
   try {
-    console.log('🔍 Fetching all batteries...');
     const batteries = await Battery.find();
-    console.log(`✅ Found ${batteries.length} batteries`);
     res.json(batteries);
   } catch (error) {
     console.error('❌ Error in GET /api/batteries:', error.message);
@@ -62,9 +72,7 @@ app.get('/api/batteries', async (req, res) => {
   }
 });
 
-// =======================
-// DELETE: Battery by ID
-// =======================
+// Delete Battery by ID
 app.delete('/api/batteries/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -84,9 +92,7 @@ app.delete('/api/batteries/:id', async (req, res) => {
   }
 });
 
-// =======================
-// PUT: Update Battery by ID
-// =======================
+// Update Battery by ID
 app.put('/api/batteries/:id', async (req, res) => {
   try {
     const { id } = req.params;
