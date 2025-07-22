@@ -25,7 +25,6 @@ router.get("/:id/soh/explain", async (req, res) => {
     }
 
     const latest = battery.sensorData[battery.sensorData.length - 1];
-
     const features = {
       voltage: latest.voltage,
       temperature: latest.temperature,
@@ -83,13 +82,11 @@ router.get("/:id/soh/explain", async (req, res) => {
           shap: parsed.shap,
           recommendation,
         });
-
       } catch (err) {
         console.error("JSON Parse Error:", err.message);
         return res.status(500).json({ error: "Failed to parse Python output" });
       }
     });
-
   } catch (err) {
     console.error("Server Error:", err.message);
     return res.status(500).json({ error: err.message });
@@ -115,7 +112,6 @@ router.get("/:id/speak-latest", async (req, res) => {
       message: "🔊 Speaking latest prediction...",
       spokenText,
     });
-
   } catch (error) {
     console.error("TTS Error:", error.message);
     return res.status(500).json({
@@ -127,7 +123,6 @@ router.get("/:id/speak-latest", async (req, res) => {
 
 // ===================================
 // ✅ POST /api/batteries
-// Create battery (auto ID if missing)
 // ===================================
 router.post("/", async (req, res) => {
   try {
@@ -149,7 +144,6 @@ router.post("/", async (req, res) => {
 
 // ===================================
 // 📄 GET /api/battery/:id/soh/report
-// Generate and download PDF
 // ===================================
 router.get("/:id/soh/report", async (req, res) => {
   try {
@@ -164,25 +158,34 @@ router.get("/:id/soh/report", async (req, res) => {
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-
     doc.pipe(res);
 
     doc.fontSize(20).text(`Battery Report - ${req.params.id}`, { underline: true });
     doc.moveDown();
-
     doc.fontSize(14).text(`State of Health: ${prediction.soh.toFixed(2)}%`);
     doc.text(`Recommendation: ${prediction.recommendation}`);
     doc.text(`Voltage: ${prediction.voltage} V`);
     doc.text(`Temperature: ${prediction.temperature} °C`);
     doc.text(`Charge Cycles: ${prediction.cycles}`);
     doc.moveDown();
-
     doc.fontSize(12).text(`Generated At: ${new Date().toLocaleString()}`);
     doc.end();
-
   } catch (err) {
     console.error("PDF Error:", err.message);
     res.status(500).json({ message: "Failed to generate PDF", error: err.message });
+  }
+});
+
+// ===================================
+// 🔍 GET /api/battery/predictions/:id
+// Check if prediction exists
+// ===================================
+router.get("/predictions/:id", async (req, res) => {
+  try {
+    const prediction = await Prediction.findOne({ batteryId: req.params.id }).sort({ createdAt: -1 });
+    res.status(200).json({ exists: !!prediction });
+  } catch (error) {
+    res.status(500).json({ exists: false });
   }
 });
 
