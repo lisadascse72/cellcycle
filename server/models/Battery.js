@@ -6,14 +6,14 @@ const sensorDataSchema = new mongoose.Schema({
   current: { type: Number },
   temperature: { type: Number },
   cycles: { type: Number, required: true },
-  timestamp: { type: Date }
+  timestamp: { type: Date, default: Date.now }
 });
 
 // 📦 Main Battery Schema
 const BatterySchema = new mongoose.Schema({
   id: {
     type: String,
-    required: true,
+    required: false, // ✅ Now optional
     unique: true
   },
   type: {
@@ -33,9 +33,18 @@ const BatterySchema = new mongoose.Schema({
     enum: ['in-use', 'second-life', 'end-of-life'],
     default: 'in-use'
   },
-  sensorData: [sensorDataSchema] // ✅ Store all sensor logs
+  sensorData: [sensorDataSchema]
 }, {
   timestamps: true
+});
+
+// ✅ Auto-generate battery ID if not provided
+BatterySchema.pre('save', async function (next) {
+  if (!this.id) {
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    this.id = `BATT-${randomNum}`;
+  }
+  next();
 });
 
 module.exports = mongoose.model('Battery', BatterySchema);
