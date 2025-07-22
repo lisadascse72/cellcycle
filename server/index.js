@@ -1,10 +1,12 @@
+// server/index.js
 require('dotenv').config(); // Load environment variables
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./db');
 const Battery = require('./models/Battery');
 
-const app = express(); // Initialize Express App
+// Initialize Express App
+const app = express();
 const PORT = process.env.PORT || 5000;
 
 // =======================
@@ -22,24 +24,24 @@ app.use(express.json());
 // Routes
 // =======================
 
-// Test Route
+// Root Health Check
 app.get('/', (req, res) => {
   res.send('🔋 CellCycle API is running');
 });
 
-// Auth Routes (Sign Up & Login)
+// Auth Routes
 const authRoutes = require('./routes/auth');
 app.use('/api/auth', authRoutes);
 
-// OTP Routes (Send + Verify Email OTP)
+// OTP Routes
 const otpRoutes = require('./routes/otp');
 app.use('/api/otp', otpRoutes);
 
-// =======================
-// Battery Routes
-// =======================
+// Battery AI/Test Routes
+const batteryRoutes = require('./routes/battery');
+app.use('/api/battery', batteryRoutes); // ✅ Must come AFTER require()
 
-// Add New Battery
+// Battery CRUD Routes (Manually defined below)
 app.post('/api/batteries', async (req, res) => {
   try {
     const battery = new Battery(req.body);
@@ -58,7 +60,6 @@ app.post('/api/batteries', async (req, res) => {
   }
 });
 
-// Get All Batteries
 app.get('/api/batteries', async (req, res) => {
   try {
     const batteries = await Battery.find();
@@ -72,11 +73,9 @@ app.get('/api/batteries', async (req, res) => {
   }
 });
 
-// Delete Battery by ID
 app.delete('/api/batteries/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const deletedBattery = await Battery.findByIdAndDelete(id);
+    const deletedBattery = await Battery.findByIdAndDelete(req.params.id);
 
     if (!deletedBattery) {
       return res.status(404).json({ message: 'Battery not found' });
@@ -92,11 +91,13 @@ app.delete('/api/batteries/:id', async (req, res) => {
   }
 });
 
-// Update Battery by ID
 app.put('/api/batteries/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const updatedBattery = await Battery.findByIdAndUpdate(id, req.body, { new: true });
+    const updatedBattery = await Battery.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
 
     if (!updatedBattery) {
       return res.status(404).json({ message: 'Battery not found' });
