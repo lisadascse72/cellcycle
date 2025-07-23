@@ -8,14 +8,12 @@ const say = require("say");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 
-// 🔢 Generate Battery ID
+// Generate Battery ID if not provided
 function generateBatteryId() {
   return `BATT-${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
-// =======================================
 // 🔋 GET /api/battery/:id/soh/explain
-// =======================================
 router.get("/:id/soh/explain", async (req, res) => {
   try {
     const battery = await Battery.findOne({ id: req.params.id });
@@ -25,10 +23,12 @@ router.get("/:id/soh/explain", async (req, res) => {
     }
 
     const latest = battery.sensorData[battery.sensorData.length - 1];
+
+    // ⚠️ Rename input features to match model training
     const features = {
-      voltage: latest.voltage,
-      temperature: latest.temperature,
-      cycles: latest.cycles,
+      ambient_temperature: latest.temperature,
+      Re: latest.voltage,
+      Rct: latest.cycles
     };
 
     const pythonScript = path.join(__dirname, "../../ml-engine/explain_soh.py");
@@ -56,13 +56,15 @@ router.get("/:id/soh/explain", async (req, res) => {
         const soh = parsed.prediction;
 
         let recommendation = "";
-        if (soh < 60) {
-          recommendation = "Battery end-of-life. Immediate recycling recommended.";
-          say.speak(`⚠️ Alert. Battery ${req.params.id} health is critically low at ${Math.round(soh)} percent. Please recycle it.`);
+        if (soh < 50) {
+          recommendation = "⚠️ Critical: Recycle battery within 30 days. Performance will degrade rapidly.";
+          say.speak(`Warning! Battery ${req.params.id} is critically low at ${Math.round(soh)} percent. Immediate recycling recommended.`);
+        } else if (soh < 60) {
+          recommendation = "Battery aging. Consider replacing within the next month.";
         } else if (soh < 75) {
-          recommendation = "Battery suitable for second-life use such as solar backup.";
+          recommendation = "Battery slightly degraded. Monitor regularly.";
         } else {
-          recommendation = "Battery is healthy. No immediate action required.";
+          recommendation = "Battery is healthy.";
         }
 
         const predictionEntry = new Prediction({
@@ -93,9 +95,7 @@ router.get("/:id/soh/explain", async (req, res) => {
   }
 });
 
-// ===================================
 // 🔊 GET /api/battery/:id/speak-latest
-// ===================================
 router.get("/:id/speak-latest", async (req, res) => {
   try {
     const prediction = await Prediction.findOne({ batteryId: req.params.id }).sort({ createdAt: -1 });
@@ -121,9 +121,7 @@ router.get("/:id/speak-latest", async (req, res) => {
   }
 });
 
-// ===================================
 // ✅ POST /api/batteries
-// ===================================
 router.post("/", async (req, res) => {
   try {
     const data = req.body;
@@ -133,18 +131,54 @@ router.post("/", async (req, res) => {
     }
 
     const battery = new Battery(data);
-    const saved = await battery.save();
+    const savedBattery = await battery.save();
 
-    res.status(201).json({ message: "Battery created", battery: saved });
+    // Inline heuristic-based SoH prediction
+    const soh = parseFloat(data.health || 100);
+    const cycles = parseInt(data.cycles || 0);
+    const rated_lifecycle = parseInt(data.rated_lifecycle || 1000);
+    const calendar_age = parseInt(data.calendar_age || 0);
+    const resistance = parseFloat(data.internal_resistance || 0);
+
+    const SoH_0 = soh / 100;
+    const cycleFade = SoH_0 * (cycles / rated_lifecycle);
+    const calendarFade = 0.01 * calendar_age;
+    const SoH_current = Math.max(0, SoH_0 - cycleFade - calendarFade) * 100;
+
+    let recommendation = "";
+    if (SoH_current < 50) {
+      recommendation = "⚠️ Critical: Recycle battery within 30 days. Performance will degrade rapidly.";
+    } else if (SoH_current < 60) {
+      recommendation = "Battery aging. Consider replacing within the next month.";
+    } else if (SoH_current < 75) {
+      recommendation = "Battery slightly degraded. Monitor regularly.";
+    } else if (resistance > 0.5) {
+      recommendation = "Internal resistance high. Performance may drop.";
+    } else if (calendar_age > 3) {
+      recommendation = "Battery is old. Observe performance closely.";
+    } else {
+      recommendation = "Battery is healthy. No immediate action required.";
+    }
+
+    const prediction = new Prediction({
+      batteryId: data.id,
+      soh: SoH_current,
+      recommendation,
+      voltage: null,
+      temperature: null,
+      cycles: cycles,
+    });
+
+    await prediction.save();
+
+    res.status(201).json({ message: "✅ Battery added successfully", battery: savedBattery });
   } catch (err) {
     console.error("Battery creation failed:", err.message);
     res.status(500).json({ error: "Battery creation failed" });
   }
 });
 
-// ===================================
 // 📄 GET /api/battery/:id/soh/report
-// ===================================
 router.get("/:id/soh/report", async (req, res) => {
   try {
     const prediction = await Prediction.findOne({ batteryId: req.params.id }).sort({ createdAt: -1 });
@@ -164,8 +198,8 @@ router.get("/:id/soh/report", async (req, res) => {
     doc.moveDown();
     doc.fontSize(14).text(`State of Health: ${prediction.soh.toFixed(2)}%`);
     doc.text(`Recommendation: ${prediction.recommendation}`);
-    doc.text(`Voltage: ${prediction.voltage} V`);
-    doc.text(`Temperature: ${prediction.temperature} °C`);
+    doc.text(`Voltage: ${prediction.voltage || 'N/A'} V`);
+    doc.text(`Temperature: ${prediction.temperature || 'N/A'} °C`);
     doc.text(`Charge Cycles: ${prediction.cycles}`);
     doc.moveDown();
     doc.fontSize(12).text(`Generated At: ${new Date().toLocaleString()}`);
@@ -176,10 +210,7 @@ router.get("/:id/soh/report", async (req, res) => {
   }
 });
 
-// ===================================
-// 🔍 GET /api/battery/predictions/:id
-// Check if prediction exists
-// ===================================
+// 🔍 Check if prediction exists
 router.get("/predictions/:id", async (req, res) => {
   try {
     const prediction = await Prediction.findOne({ batteryId: req.params.id }).sort({ createdAt: -1 });
