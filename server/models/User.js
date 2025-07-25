@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
   profilePic: { type: String, default: '' }
 });
 
-// Pre-save hook to hash password only if modified (signup or password change)
+// Hash password only if modified or new
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
 

@@ -8,7 +8,9 @@ const PredictionSchema = new mongoose.Schema({
   recommendation: { type: String },
   voltage: { type: Number },
   temperature: { type: Number },
-  cycles: { type: Number }
+  cycles: { type: Number },
+  accuracy: { type: Number },  // optional future use
+  daysLeft: { type: Number }   // estimated usage days
 });
 
 module.exports = mongoose.model('Prediction', PredictionSchema);
